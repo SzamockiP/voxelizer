@@ -31,12 +31,13 @@ uint32_t compact1by2(uint32_t x) {
 
 void validate(const Mesh& mesh, const Params& p) {
     auto fail = [](const std::string& message) { throw std::invalid_argument(message); };
-    if (!std::has_single_bit(p.grid) || p.grid < 4 || p.grid > (1u << 23))
-        fail(std::format("grid must be a power of two in [4, 2^23], got {}", p.grid));
+    if (!std::has_single_bit(p.grid) || p.grid < 4) fail(std::format("grid must be a power of two of at least 4, got {}", p.grid));
+    // 2048: the scan of the run totals is one workgroup of 1024 threads (see compact_scan_totals.comp).
     if (!std::has_single_bit(p.block) || p.block < 4 || p.block > 2048 || p.block > p.grid)
         fail(std::format("block must be a power of two in [4, min(2048, grid)], got {}", p.block));
+    // 1024: block Morton indices have 10 bits per axis. Together with the block limit this caps grid at 2^21.
     if (p.grid / p.block > 1024)
-        fail(std::format("grid/block = {} blocks per axis; dense block counters allow at most 1024", p.grid / p.block));
+        fail(std::format("grid/block = {} blocks per axis, at most 1024 are supported (grid <= 1024 * block)", p.grid / p.block));
     if (p.buffers < 1) fail("need at least one compact buffer");
     // List entries are addressed through gl_VertexIndex = entry * 3.
     if (p.listBudget < 4 || p.listBudget / 4 * 3 > UINT32_MAX)
