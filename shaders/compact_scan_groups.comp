@@ -1,0 +1,15 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "compact.glsl"
+
+// Step 1 of the prefix sum: each workgroup scans 1024 group counts and records their total.
+layout(local_size_x = 1024) in;
+
+void main() {
+    uint g = gl_GlobalInvocationID.x;
+    uint count = g < pc.groupCount ? pc.counts.v[g] : 0u;
+    uint total;
+    uint offset = workgroupExclusiveSum(count, total);
+    if (g < pc.groupCount) pc.offsets.v[g] = offset;
+    if (gl_LocalInvocationIndex == 0u) pc.totals.v[gl_WorkGroupID.x] = total;
+}

@@ -1,0 +1,17 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "compact.glsl"
+
+// Step 2 of the prefix sum: one workgroup scans the per-run totals (at most 512, for a 2048 block) in place
+// and writes the block's record count into the compact buffer header.
+layout(local_size_x = 1024) in;
+
+void main() {
+    uint runs = (pc.groupCount + 1023u) / 1024u;
+    uint t = gl_LocalInvocationIndex;
+    uint value = t < runs ? pc.totals.v[t] : 0u;
+    uint total;
+    uint offset = workgroupExclusiveSum(value, total);
+    if (t < runs) pc.totals.v[t] = offset;
+    if (t == 0u) pc.records.count = uint64_t(total);
+}

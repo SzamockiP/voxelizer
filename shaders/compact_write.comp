@@ -1,0 +1,26 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "compact.glsl"
+
+// Writes (absolute brick Morton key, mask) for every non-empty brick, in Morton order, and clears the
+// dense block and the group counts for the next one. Groups without non-empty bricks exit at once.
+layout(local_size_x = 256) in;
+shared uint sums[64];
+
+void main() {
+    uint g = gl_WorkGroupID.x;
+    if (pc.counts.v[g] == 0u) return; // uniform per group
+    uint i = gl_GlobalInvocationID.x;
+    uvec2 mask = i < pc.brickCount ? pc.dense.v[i] : uvec2(0);
+    bool nonEmpty = mask != uvec2(0);
+    uvec4 ballot = subgroupBallot(nonEmpty);
+    if (subgroupElect()) sums[gl_SubgroupID] = subgroupBallotBitCount(ballot);
+    barrier(); // every thread has read the count
+    if (gl_LocalInvocationIndex == 0u) pc.counts.v[g] = 0u;
+    if (!nonEmpty) return;
+
+    uint at = pc.totals.v[g >> 10] + pc.offsets.v[g] + subgroupBallotExclusiveBitCount(ballot);
+    for (uint s = 0u; s < gl_SubgroupID; ++s) at += sums[s];
+    pc.records.r[at].v = uvec4(unpackUint2x32(pc.keyPrefix | uint64_t(i)), mask);
+    pc.dense.v[i] = uvec2(0);
+}
